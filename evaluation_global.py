@@ -20,6 +20,7 @@ import time
 import torch
 import torch.optim as optim
 import random
+from tqdm.cli import tqdm
 
 SOLVERS = ["dopri8","dopri5", "bdf", "rk4", "midpoint", 'adams', 'explicit_adams', 'fixed_adams',"adaptive_heun"]
 parser = argparse.ArgumentParser('ClimODE')
@@ -84,9 +85,14 @@ num_years  = 2
 Final_train_data = 0
 Final_val_data = 0
 
-vel_test= torch.from_numpy(np.load('### Test velocity here'))
-
-model = torch.load(str(cwd) + "checkpoints/ClimODE_global.pt",map_location=torch.device('cpu')).to(device)
+# vel_test= torch.from_numpy(np.load('### Test velocity here'))
+vel_train,vel_val,vel_test = load_velocity([
+    'train_10year_2day_mm',
+    'val_10year_2day_mm',
+    'test_10year_2day_mm'
+])
+# NOTE: Absolute garbage - code didn't have a proper path here, mising a slash...
+model = torch.load(str(cwd) + "/checkpoints/ClimODE_global.pt",map_location=torch.device('cpu')).to(device)
 print(model)
 
 org_time = 1
@@ -98,24 +104,29 @@ Lead_RMSD_arr = {"z":[[] for _ in range(7)],"t":[[] for _ in range(7)],"t2m":[[]
 Lead_ACC = {"z":[[] for _ in range(7)],"t":[[] for _ in range(7)],"t2m":[[] for _ in range(7)],"u10":[[] for _ in range(7)],"v10":[[] for _ in range(7)]}
 Lead_CRPS = {"z":[[] for _ in range(7)],"t":[[] for _ in range(7)],"t2m":[[] for _ in range(7)],"u10":[[] for _ in range(7)],"v10":[[] for _ in range(7)]}
 
-for entry,(time_steps,batch) in enumerate(zip(time_loader,Test_loader)):
-        data = batch[0].to(device).view(num_years,1,len(paths_to_data)*(args.scale+1),H,W)
-        past_sample = vel_test[entry].view(num_years,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
-        model.update_param([past_sample,const_channels_info.to(device),lat_map.to(device),lon_map.to(device)])
-        t = time_steps.float().to(device).flatten()
-        mean_pred,std_pred, mean_wo_bias = model(t,data)
-        mean_avg = mean_pred.view(-1,len(paths_to_data)*(args.scale+1),H,W)
-        std_avg = std_pred.view(-1,len(paths_to_data)*(args.scale+1),H,W)
-        
-        for yr in range(2): 
-            for t_step in range(1,len(time_steps),1):
-                evaluate_rmsd = evaluation_rmsd_mm(mean_pred[t_step,yr,:,:,:].cpu(),batch[t_step,yr,:,:,:].cpu(),lat,lon,max_lev,min_lev,H,W,levels)
-                evaluate_acc = evaluation_acc_mm(mean_pred[t_step,yr,:,:,:].cpu(),batch[t_step,yr,:,:,:].cpu(),lat,lon,max_lev,min_lev,H,W,levels,clim[yr,:,:,:].cpu().detach().numpy())
-                evaluate_crps = evaluation_crps_mm(mean_pred[t_step,yr,:,:,:].cpu(),batch[t_step,yr,:,:,:].cpu(),lat,lon,max_lev,min_lev,H,W,levels,std_pred[t_step,yr,:,:,:].cpu())
-                for idx,lev in enumerate(levels):
-                    Lead_RMSD_arr[lev][t_step-1].append(evaluate_rmsd[idx]) 
-                    Lead_ACC[lev][t_step-1].append(evaluate_acc[idx])
-                    Lead_CRPS[lev][t_step-1].append(evaluate_crps[idx])
+for entry,(time_steps,batch) in tqdm(
+    enumerate(zip(time_loader,Test_loader)),
+    colour='green',
+    desc='eval',
+    total=len(time_loader)
+):
+    data = batch[0].to(device).view(num_years,1,len(paths_to_data)*(args.scale+1),H,W)
+    past_sample = vel_test[entry].view(num_years,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
+    model.update_param([past_sample,const_channels_info.to(device),lat_map.to(device),lon_map.to(device)])
+    t = time_steps.float().to(device).flatten()
+    mean_pred,std_pred, mean_wo_bias = model(t,data)
+    mean_avg = mean_pred.view(-1,len(paths_to_data)*(args.scale+1),H,W)
+    std_avg = std_pred.view(-1,len(paths_to_data)*(args.scale+1),H,W)
+    
+    for yr in range(2): 
+        for t_step in range(1,len(time_steps),1):
+            evaluate_rmsd = evaluation_rmsd_mm(mean_pred[t_step,yr,:,:,:].cpu(),batch[t_step,yr,:,:,:].cpu(),lat,lon,max_lev,min_lev,H,W,levels)
+            evaluate_acc = evaluation_acc_mm(mean_pred[t_step,yr,:,:,:].cpu(),batch[t_step,yr,:,:,:].cpu(),lat,lon,max_lev,min_lev,H,W,levels,clim[yr,:,:,:].cpu().detach().numpy())
+            evaluate_crps = evaluation_crps_mm(mean_pred[t_step,yr,:,:,:].cpu(),batch[t_step,yr,:,:,:].cpu(),lat,lon,max_lev,min_lev,H,W,levels,std_pred[t_step,yr,:,:,:].cpu())
+            for idx,lev in enumerate(levels):
+                Lead_RMSD_arr[lev][t_step-1].append(evaluate_rmsd[idx]) 
+                Lead_ACC[lev][t_step-1].append(evaluate_acc[idx])
+                Lead_CRPS[lev][t_step-1].append(evaluate_crps[idx])
 
 
 for t_idx in range(8):

@@ -1,4 +1,5 @@
 import warnings
+from tqdm.cli import tqdm
 import os
 from model_function import *
 from model_utils import *
@@ -25,6 +26,7 @@ import logging
 logging.propagate = False 
 logging.getLogger().setLevel(logging.ERROR)
 import sys
+from pathlib import Path
 
 set_seed(42)
 cwd = os.getcwd()
@@ -102,12 +104,20 @@ train_best_loss = float('inf')
 best_epoch = float('inf')
 print("############################ Data is loaded, Fitting the velocity #########################")
 
-get_gauss_kernel((32,64),lat,lon)
+if not Path(str(cwd) +"/kernel.npy").exists():
+    get_gauss_kernel((32,64),lat,lon)
+else:
+    print("## DETECTED kernel.npy from previous run, will load from disk instead of regen. ")
+
 kernel = torch.from_numpy(np.load(str(cwd) +"/kernel.npy"))
 #breakpoint()
-fit_velocity(time_idx,time_loader,Final_train_data,Train_loader,torch.device('cpu'),num_years,paths_to_data,args.scale,H,W,types='train_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
-fit_velocity(time_idx,time_loader,Final_val_data,Val_loader,torch.device('cpu'),1,paths_to_data,args.scale,H,W,types='val_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
-fit_velocity(time_idx,time_loader,Final_test_data,Test_loader,torch.device('cpu'),2,paths_to_data,args.scale,H,W,types='test_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+if not Path('test_10year_2day_mm_vel.npy').exists():
+    print("Fitting velocity...")
+    fit_velocity(time_idx,time_loader,Final_train_data,Train_loader,torch.device('cpu'),num_years,paths_to_data,args.scale,H,W,types='train_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+    fit_velocity(time_idx,time_loader,Final_val_data,Val_loader,torch.device('cpu'),1,paths_to_data,args.scale,H,W,types='val_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+    fit_velocity(time_idx,time_loader,Final_test_data,Test_loader,torch.device('cpu'),2,paths_to_data,args.scale,H,W,types='test_10year_2day_mm',vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+else:
+    print("## DETECTED test_10year_2day_mm_vel.npy from previous run, will load from disk instead of regen")
 
 vel_train,vel_val = load_velocity(['train_10year_2day_mm','val_10year_2day_mm'])
 print("############################ Velocity loaded, Model starts to train #########################")
@@ -125,7 +135,7 @@ for epoch in range(args.niters):
     else:
         var_coeff = 2*scheduler.get_last_lr()[0]
     
-    for entry,(time_steps,batch) in enumerate(zip(time_loader,Train_loader)):
+    for entry,(time_steps,batch) in tqdm(enumerate(zip(time_loader,Train_loader)), colour='green', desc='train'):
         optimizer.zero_grad()
         data = batch[0].to(device).view(num_years,1,len(paths_to_data)*(args.scale+1),H,W)
         past_sample = vel_train[entry].view(num_years,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
@@ -149,7 +159,7 @@ for epoch in range(args.niters):
     scheduler.step()
     print("|Iter ",epoch," | Total Train Loss ", total_train_loss,"|")
   
-    for entry,(time_steps,batch) in enumerate(zip(time_loader,Val_loader)):
+    for entry,(time_steps,batch) in enumerate(zip(tqdm(time_loader, colour='blue', desc='test'),Val_loader)):
         data = batch[0].to(device).view(1,1,len(paths_to_data)*(args.scale+1),H,W)
         past_sample = vel_val[entry].view(1,2*len(paths_to_data)*(args.scale+1),H,W).to(device)
         model.update_param([past_sample,const_channels_info.to(device),lat_map.to(device),lon_map.to(device)])

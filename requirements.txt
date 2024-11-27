@@ -12,3 +12,4 @@ torchcubicspline @ git+https://github.com/patrick-kidger/torchcubicspline.git
 properscoring # (for CRPS scores) : https://pypi.org/project/properscoring/
 matplotlib
 pandas
+tqdm
