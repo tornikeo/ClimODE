@@ -1,9 +1,14 @@
 torch >= 1.12.0
 torchdiffeq # : https://github.com/rtqichen/torchdiffeq.
-torch-scatter 
-torch-sparse 
-torch-cluster 
-torch-spline-conv 
+# THESE COME INSTALLED WITH `conda install pytorch-cluster -c pyg -y`
+
+# torch-scatter 
+# torch-sparse -f https://pytorch-geometric.com/whl/torch-2.2.1+cu121.html
+# torch-cluster -f https://data.pyg.org/whl/torch-2.2.1+cu121.html
+# torch-spline-conv 
 # torchcubicspline #: https://github.com/patrick-kidger/torchcubicspline
+
 torchcubicspline @ git+https://github.com/patrick-kidger/torchcubicspline.git
 properscoring # (for CRPS scores) : https://pypi.org/project/properscoring/
+matplotlib
+pandas
