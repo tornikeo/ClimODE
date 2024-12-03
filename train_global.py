@@ -40,7 +40,7 @@ parser.add_argument('--rtol', type=float, default=5e-3)
 parser.add_argument("--step_size", type=float, default=None, help="Optional fixed step size.")
 parser.add_argument('--niters', type=int, default=300)
 parser.add_argument('--scale', type=int, default=0)
-parser.add_argument('--batch_size', type=int, default=8)
+parser.add_argument('--batch_size', type=int, default=6)
 parser.add_argument('--spectral', type=int, default=0,choices=[0,1])
 parser.add_argument('--lr', type=float, default=0.0005)
 parser.add_argument('--weight_decay', type=float, default=1e-5)
@@ -182,6 +182,6 @@ for epoch in range(args.niters):
     if val_loss < best_loss:
         best_loss = val_loss
         best_epoch = epoch
-        torch.save(model,str(cwd) + "/Models/" + "ClimODE_global_"+args.solver+"_"+str(args.spectral)+"_model_" + str(epoch) + ".pt")
+        torch.save(model, str(cwd) + "/Models/" + "ClimODE_global_"+args.solver+"_"+str(args.spectral)+"_model_" + str(epoch) + ".pt")
 
 

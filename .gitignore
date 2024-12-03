@@ -1,3 +1,5 @@
 *.nc
 *.zip
 __pycache__/
+era5_data
+*.npy

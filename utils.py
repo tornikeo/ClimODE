@@ -8,6 +8,7 @@ from numpy import load
 import os
 import torch.optim as optim
 import torch
+from tqdm.cli import tqdm
 import torch.nn as nn
 import torch.nn.functional as F
 from torchcubicspline import(natural_cubic_spline_coeffs, 
@@ -55,8 +56,9 @@ def set_seed(seed: int = 42) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     # When running on the CuDNN backend, two further options must be set
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    
+    # torch.backends.cudnn.deterministic = True # I don't care about determinism on this level.
+    # torch.backends.cudnn.benchmark = False
     # Set a fixed value for the hash seed
     os.environ["PYTHONHASHSEED"] = str(seed)
     print(f"Random seed set as {seed}")
@@ -381,9 +383,11 @@ def get_gauss_kernel_region(shape,lat,lon,region):
 
 def optimize_vel(num,data,delta_u,vel_model,kernel,H,W,steps=200):
     model = vel_model(num,H,W)
+    model = model.to(data.device)
     optimizer = optim.Adam(model.parameters(),lr=2)
     best_loss = float('inf')
     loss_step = []
+    loss_fn = nn.MSELoss()
     for step in range(steps):
         optimizer.zero_grad()
         out,v_x,v_y = model(data)
@@ -394,7 +398,7 @@ def optimize_vel(num,data,delta_u,vel_model,kernel,H,W,steps=200):
         final_x = torch.matmul(v_x_kernel, kernel_v_x).mean()
         v_y_kernel  = torch.matmul(kernel_v_y.transpose(2,3), kernel_expand)
         final_y = torch.matmul(v_y_kernel, kernel_v_y).mean() 
-        vel_loss = nn.MSELoss()(delta_u,out.squeeze(dim=1)) + 0.0000001*(final_x + final_y)
+        vel_loss = loss_fn(delta_u,out.squeeze(dim=1)) + 0.0000001*(final_x + final_y)
         loss_step.append(vel_loss.item())
         if vel_loss.item() < best_loss:
             best_loss = vel_loss.item()
@@ -408,10 +412,13 @@ def optimize_vel(num,data,delta_u,vel_model,kernel,H,W,steps=200):
 
 
 
-def fit_velocity(time_idx,time_loader,Final_train_data,data_loader,device,num_years,paths_to_data,scale,H,W,types,vel_model,kernel,lat,lon):
+def fit_velocity(time_idx,time_loader,Final_train_data,data_loader,device,
+                 num_years,paths_to_data,scale,H,W,types,vel_model,kernel,lat,lon):
     num =0
+    kernel = kernel.to(device)
     cwd = os.getcwd() 
-    for idx_steps,time_steps,batch in zip(time_idx,time_loader,data_loader):
+    for idx_steps,time_steps,batch in tqdm(zip(time_idx,time_loader,data_loader), colour='green',
+                                           total=len(time_idx)):
         pst = [time_steps[0].item()-i for i in range(3)]
         pst.reverse()
         pst_idx = [idx_steps[0].item()-i for i in range(3)]
@@ -432,7 +439,7 @@ def fit_velocity(time_idx,time_loader,Final_train_data,data_loader,device,num_ye
     if os.path.exists(str(cwd) +"/" + types + "_vel.npy"):
         os.remove(str(cwd) +"/" + types + "_vel.npy")
 
-    np.save(str(cwd) +"/" + types + "_vel.npy",Final_v.detach().numpy())
+    np.save(str(cwd) +"/" + types + "_vel.npy",Final_v.cpu().detach().numpy())
 
 
 def load_velocity(types):
