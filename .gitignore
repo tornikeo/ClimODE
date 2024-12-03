@@ -3,3 +3,8 @@
 __pycache__/
 era5_data
 *.npy
+Models/
+.env
+wandb/
+checkpoints/
+nohup.out
