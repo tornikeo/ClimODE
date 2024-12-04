@@ -1,4 +1,5 @@
 import warnings
+import wandb
 import os
 from model_function import *
 from model_utils import *
@@ -46,6 +47,17 @@ parser.add_argument('--weight_decay', type=float, default=1e-5)
 parser.add_argument('--region', type=str, default='NorthAmerica',choices=BOUNDARIES)
 args = parser.parse_args()
 
+wandb.init(
+    # set the wandb project where this run will be logged
+    project="climode-region-Australia",
+
+    # track hyperparameters and run metadata
+    config={
+        **vars(args),  # Include all arguments in args
+        "architecture": "climODE",
+        "dataset": "era5",
+    }
+)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 train_time_scale= slice('2006','2016')
@@ -166,8 +178,19 @@ for epoch in range(args.niters):
         val_loss = val_loss + loss.item()
 
     print("|Iter ",epoch," | Total Val Loss ", val_loss,"|")
+    
+    # Log statistics to wandb
+    wandb.log({
+        "epoch": epoch,
+        "var_coeff": var_coeff,
+        "total_train_loss": total_train_loss,
+        "total_val_loss": val_loss,
+        "learning_rate": lr_val,
+    })
 
     if val_loss < best_loss:
         best_loss = val_loss
         best_epoch = epoch
         torch.save(model,str(cwd) + "/Models/" + "ClimODE_region_"+str(args.region)+"_"+args.solver+"_"+str(args.spectral)+"_model_" + str(epoch) + ".pt")
+
+wandb.finish()
