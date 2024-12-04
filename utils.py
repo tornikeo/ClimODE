@@ -218,12 +218,12 @@ def evaluation_rmsd_mm_region(Pred,Truth,lat,lon,max_vals,min_vals,H,W,levels):
 
         pred = pred_spectral*(max_vals[idx] - min_vals[idx]) + min_vals[idx]
 
-        das_pred.append(xr.DataArray(pred.reshape(1,H,W-1),dims=['time','lat','lon'],coords={'time':[0],'lat':lat[1:],'lon':lon[1:]},name=lev))
+        das_pred.append(xr.DataArray(pred.reshape(1,H-1,W-1),dims=['time','lat','lon'],coords={'time':[0],'lat':lat[1:],'lon':lon[1:]},name=lev))
         Pred_xr = xr.merge(das_pred)
         
         true = true_spectral*(max_vals[idx] - min_vals[idx]) + min_vals[idx]
 
-        das_true.append(xr.DataArray(true.reshape(1,H,W-1),dims=['time','lat','lon'],coords={'time':[0],'lat':lat[1:],'lon':lon[1:]},name=lev))
+        das_true.append(xr.DataArray(true.reshape(1,H-1,W-1),dims=['time','lat','lon'],coords={'time':[0],'lat':lat[1:],'lon':lon[1:]},name=lev))
         True_xr = xr.merge(das_true)
         error = Pred_xr - True_xr
         weights_lat = np.cos(np.deg2rad(error.lat))
@@ -488,7 +488,7 @@ def get_train_test_data_without_scales_batched_monthly(data_path,train_time_scal
     time_vals = data_test_final.time.values
     train_times = [i for i in range(2006,2016)]
     test_times = [2017,2018]
-    val_times = [2016]
+    val_times = [2016]n the evaluation
 
     train_data = get_batched_monthly(train_times,data_train_final,lev)
     test_data = get_batched_monthly(test_times,data_test_final,lev)
