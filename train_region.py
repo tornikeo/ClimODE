@@ -1,4 +1,3 @@
-import warnings
 import wandb
 import os
 from model_function import *
@@ -8,12 +7,7 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as Fin
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib
 from torchdiffeq import odeint as odeint
-import matplotlib
-
-matplotlib.use("Agg")
 import argparse
 import torch
 
