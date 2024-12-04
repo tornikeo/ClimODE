@@ -1,3 +1,4 @@
+import warnings
 import wandb
 import os
 from model_function import *
@@ -247,22 +248,20 @@ for epoch in range(args.niters):
         print("Val Loss for batch is ", loss.item())
         val_loss = val_loss + loss.item()
 
-    print("|Iter ", epoch, " | Total Val Loss ", val_loss, "|")
+    print("|Iter ",epoch," | Total Val Loss ", val_loss,"|")
+    
+    # Log statistics to wandb
+    wandb.log({
+        "epoch": epoch,
+        "var_coeff": var_coeff,
+        "total_train_loss": total_train_loss,
+        "total_val_loss": val_loss,
+        "learning_rate": lr_val,
+    })
 
     if val_loss < best_loss:
         best_loss = val_loss
         best_epoch = epoch
-        torch.save(
-            model,
-            str(cwd)
-            + "/Models/"
-            + "ClimODE_region_"
-            + str(args.region)
-            + "_"
-            + args.solver
-            + "_"
-            + str(args.spectral)
-            + "_model_"
-            + str(epoch)
-            + ".pt",
-        )
+        torch.save(model,str(cwd) + "/Models/" + "ClimODE_region_"+str(args.region)+"_"+args.solver+"_"+str(args.spectral)+"_model_" + str(epoch) + ".pt")
+
+wandb.finish()
