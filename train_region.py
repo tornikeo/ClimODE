@@ -93,7 +93,7 @@ time_idx_steps = torch.tensor([i for i in range(365*4)]).view(-1,1)
 time_idx = DataLoader(time_idx_steps[2:],batch_size=args.batch_size,shuffle=False,pin_memory=False)
 #Model declaration
 num_years = len(range(2006,2016))
-model = Climate_encoder_free_uncertain_region(len(paths_to_data),2,out_types=len(paths_to_data),method=args.solver,use_att=True,use_err=True,use_pos=False).to(device)
+model = ClimODE_uncertain_region(len(paths_to_data),2,out_types=len(paths_to_data),method=args.solver,use_att=True,use_err=True,use_pos=False).to(device)
 #model.apply(weights_init_uniform_rule)
 param = count_parameters(model)
 optimizer = optim.AdamW(model.parameters(), lr=args.lr)
