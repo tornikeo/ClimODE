@@ -106,9 +106,9 @@ print("############################ Data is loaded, Fitting the velocity #######
 
 get_gauss_kernel_region((H,W),lat,lon,args.region)
 kernel = torch.from_numpy(np.load(str(cwd) +"/kernel_"+str(args.region)+".npy"))
-fit_velocity(time_idx,time_loader,Final_train_data,Train_loader,torch.device('cpu'),num_years,paths_to_data,args.scale,H,W,types='train_10year_2day_mm_' + str(args.region),vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
-fit_velocity(time_idx,time_loader,Final_val_data,Val_loader,torch.device('cpu'),1,paths_to_data,args.scale,H,W,types='val_10year_2day_mm_'+ str(args.region),vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
-fit_velocity(time_idx,time_loader,Final_test_data,Test_loader,torch.device('cpu'),2,paths_to_data,args.scale,H,W,types='test_10year_2day_mm_'+ str(args.region),vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+fit_velocity(time_idx,time_loader,Final_train_data,Train_loader,torch.device('cuda'),num_years,paths_to_data,args.scale,H,W,types='train_10year_2day_mm_' + str(args.region),vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+fit_velocity(time_idx,time_loader,Final_val_data,Val_loader,torch.device('cuda'),1,paths_to_data,args.scale,H,W,types='val_10year_2day_mm_'+ str(args.region),vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
+fit_velocity(time_idx,time_loader,Final_test_data,Test_loader,torch.device('cuda'),2,paths_to_data,args.scale,H,W,types='test_10year_2day_mm_'+ str(args.region),vel_model=Optim_velocity,kernel=kernel,lat=lat,lon=lon)
 
 vel_train,vel_val = load_velocity(['train_10year_2day_mm_' + str(args.region),'val_10year_2day_mm_'+ str(args.region)])
 print("############################ Velocity loaded, Model starts to train #########################")
