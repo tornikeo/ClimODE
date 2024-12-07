@@ -339,52 +339,47 @@ class Climate_encoder_free_uncertain(nn.Module):
         ds_grad_y = torch.gradient(ds, dim=2)[0]
         nabla_u = torch.cat([ds_grad_x, ds_grad_y], dim=1)
 
-        if self.pos:
-            comb_rep = torch.cat(
-                [t_emb / 24, day_emb, seas_emb, nabla_u, v, ds, self.pos_feat], dim=1
-            )
-        else:
-            cos_lat_map, sin_lat_map = torch.cos(self.new_lat_map), torch.sin(
-                self.new_lat_map
-            )
-            cos_lon_map, sin_lon_map = torch.cos(self.new_lon_map), torch.sin(
-                self.new_lon_map
-            )
-            t_cyc_emb = torch.cat([day_emb, seas_emb], dim=1)
-            pos_feats = torch.cat(
-                [
-                    cos_lat_map,
-                    cos_lon_map,
-                    sin_lat_map,
-                    sin_lon_map,
-                    sin_lat_map * cos_lon_map,
-                    sin_lat_map * sin_lon_map,
-                ],
-                dim=1,
-            )
-            pos_time_ft = self.get_time_pos_embedding(t_cyc_emb, pos_feats)
-            comb_rep = torch.cat(
-                [
-                    t_emb / 24,
-                    day_emb,
-                    seas_emb,
-                    nabla_u,
-                    v,
-                    ds,
-                    self.new_lat_map,
-                    self.new_lon_map,
-                    self.lsm,
-                    self.oro,
-                    pos_feats,
-                    pos_time_ft,
-                ],
-                dim=1,
-            )
+        assert not self.pos
+            
+        cos_lat_map, sin_lat_map = torch.cos(self.new_lat_map), torch.sin(
+            self.new_lat_map
+        )
+        cos_lon_map, sin_lon_map = torch.cos(self.new_lon_map), torch.sin(
+            self.new_lon_map
+        )
+        t_cyc_emb = torch.cat([day_emb, seas_emb], dim=1)
+        pos_feats = torch.cat(
+            [
+                cos_lat_map,
+                cos_lon_map,
+                sin_lat_map,
+                sin_lon_map,
+                sin_lat_map * cos_lon_map,
+                sin_lat_map * sin_lon_map,
+            ],
+            dim=1,
+        )
+        pos_time_ft = self.get_time_pos_embedding(t_cyc_emb, pos_feats)
+        comb_rep = torch.cat(
+            [
+                t_emb / 24,
+                day_emb,
+                seas_emb,
+                nabla_u,
+                v,
+                ds,
+                self.new_lat_map,
+                self.new_lon_map,
+                self.lsm,
+                self.oro,
+                pos_feats,
+                pos_time_ft,
+            ],
+            dim=1,
+        )
 
-        if self.att:
-            dv = self.vel_f(comb_rep) + self.gamma * self.vel_att(comb_rep)
-        else:
-            dv = self.vel_f(comb_rep)
+        assert self.att
+        dv = self.vel_f(comb_rep) + self.gamma * self.vel_att(comb_rep)
         v_x = (
             v[:, : self.out_ch, :, :]
             .view(-1, self.out_ch, vs.shape[2], vs.shape[3])
