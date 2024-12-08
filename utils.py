@@ -581,7 +581,7 @@ def get_train_test_data_without_scales_batched_monthly(
     time_vals = data_test_final.time.values
     train_times = [i for i in range(2006,2016)]
     test_times = [2017,2018]
-    val_times = [2016]n the evaluation
+    val_times = [2016]
 
     train_data = get_batched_monthly(train_times, data_train_final, lev)
     test_data = get_batched_monthly(test_times, data_test_final, lev)

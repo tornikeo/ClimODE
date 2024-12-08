@@ -1,25 +1,24 @@
-import torch
 import os
-import datasets
-import warnings
 from tqdm.cli import tqdm
 import os
 from torch.utils.data import DataLoader
-import torch.nn.functional as Fin
-import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
 from torchdiffeq import odeint as odeint
-import matplotlib
 import argparse
 import torch
 from pathlib import Path
 
+import torch
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim
 import xarray as xr
+
+#
+from utils import load_velocity, fit_velocity, get_gauss_kernel
+from model_function import Optim_velocity
 
 
 def get_batched(train_times, data_train_final, lev):
@@ -94,11 +93,9 @@ def get_train_test_data_without_scales_batched(
 
 
 def load_velocity(types):
-    cwd = os.getcwd()
     vel = []
     for file in types:
-        vel.append(np.load(str(cwd) + "/" + file + "_vel.npy"))
-
+        vel.append(np.load(f"{file}_vel.npy"))
     return (torch.from_numpy(v) for v in vel)
 
 
@@ -137,6 +134,7 @@ class ResidualBlock(nn.Module):
         )
         self.bn2 = nn.BatchNorm2d(out_channels)
         self.drop = nn.Dropout(p=0.1)
+
         # If the number of input channels is not equal to the number of output channels we have to
         # project the shortcut connection
         if in_channels != out_channels:
@@ -153,10 +151,13 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x: torch.Tensor):
         # First convolution layer
-        x_mod = F.pad(F.pad(x, (0, 0, 1, 1), "reflect"), (1, 1, 0, 0), "circular")
+        x_mod = pad_reflect_circular(
+            x
+        )  # F.pad(F.pad(x, (0, 0, 1, 1), "reflect"), (1, 1, 0, 0), "circular")
         h = self.activation(self.bn1(self.conv1(self.norm1(x_mod))))
         # Second convolution layer
-        h = F.pad(F.pad(h, (0, 0, 1, 1), "reflect"), (1, 1, 0, 0), "circular")
+        # h = F.pad(F.pad(h, (0, 0, 1, 1), "reflect"), (1, 1, 0, 0), "circular")
+        h = pad_reflect_circular(h)
         h = self.activation(self.bn2(self.conv2(self.norm2(h))))
         h = self.drop(h)
         # Add the shortcut connection and return
@@ -206,16 +207,21 @@ class Climate_ResNet_2D(nn.Module):
         return dx_final
 
 
-class boundarypad(nn.Module):
-    def __init__(self):
+def pad_reflect_circular(input: Tensor) -> Tensor:
+    return F.pad(F.pad(input, (0, 0, 1, 1), "reflect"), (1, 1, 0, 0), "circular")
+
+
+class BoundaryPad(nn.Module):
+    def __init__(
+        self,
+    ):
         super().__init__()
 
     def forward(self, input):
-        return F.pad(F.pad(input, (0, 0, 1, 1), "reflect"), (1, 1, 0, 0), "circular")
+        return pad_reflect_circular(input)
 
 
 class Self_attn_conv(nn.Module):
-
     def __init__(self, in_channels, out_channels):
         super(Self_attn_conv, self).__init__()
         self.query = self._conv(in_channels, in_channels // 8, stride=1)
@@ -230,13 +236,13 @@ class Self_attn_conv(nn.Module):
 
     def _conv(self, n_in, n_out, stride):
         return nn.Sequential(
-            boundarypad(),
+            BoundaryPad(),
             nn.Conv2d(n_in, n_in // 2, kernel_size=(3, 3), stride=stride, padding=0),
             nn.LeakyReLU(0.3),
-            boundarypad(),
+            BoundaryPad(),
             nn.Conv2d(n_in // 2, n_out, kernel_size=(3, 3), stride=stride, padding=0),
             nn.LeakyReLU(0.3),
-            boundarypad(),
+            BoundaryPad(),
             nn.Conv2d(n_out, n_out, kernel_size=(3, 3), stride=stride, padding=0),
         )
 
@@ -293,9 +299,7 @@ class Climate_encoder_free_uncertain(nn.Module):
         self.method = method
         err_in = 9 + out_types * int(use_pos) + 34 * (1 - int(use_pos))
         assert use_err
-        self.noise_net = Climate_ResNet_2D(
-            err_in, [3, 2, 2], [128, 64, 2 * out_types]
-        )
+        self.noise_net = Climate_ResNet_2D(err_in, [3, 2, 2], [128, 64, 2 * out_types])
         self.att = use_att
         self.err = use_err
         self.pos = use_pos
@@ -340,7 +344,7 @@ class Climate_encoder_free_uncertain(nn.Module):
         nabla_u = torch.cat([ds_grad_x, ds_grad_y], dim=1)
 
         assert not self.pos
-            
+
         cos_lat_map, sin_lat_map = torch.cos(self.new_lat_map), torch.sin(
             self.new_lat_map
         )
@@ -443,7 +447,7 @@ class Climate_encoder_free_uncertain(nn.Module):
         final_out = noise_net(comb_rep).view(len(t), -1, 2 * self.out_ch, H, W)
 
         mean = s_final + final_out[:, :, : self.out_ch]
-        std = nn.Softplus()(final_out[:, :, self.out_ch :])
+        std = F.softplus(final_out[:, :, self.out_ch :])
 
         return mean, std
 
@@ -531,7 +535,6 @@ def nll(mean, std, truth, lat, var_coeff):
 def main():
     torch.manual_seed(42)
 
-    cwd = os.getcwd()
     # data_path = {'z500':str(cwd) + '/era5_data/geopotential_500/*.nc','t850':str(cwd) + '/era5_data/temperature_850/*.nc'}
     SOLVERS = [
         "dopri8",
@@ -553,7 +556,7 @@ def main():
     parser.add_argument(
         "--step_size", type=float, default=None, help="Optional fixed step size."
     )
-    parser.add_argument("--niters", type=int, default=300)
+    parser.add_argument("--niters", type=int, default=100)
     parser.add_argument("--scale", type=int, default=0)
     parser.add_argument("--batch_size", type=int, default=6)
     parser.add_argument("--spectral", type=int, default=0, choices=[0, 1])
@@ -567,7 +570,6 @@ def main():
     device = torch.device("cuda")
     args
 
-    # %%
     train_time_scale = slice("2006", "2016")
     val_time_scale = slice("2016", "2016")
     test_time_scale = slice("2017", "2018")
@@ -616,9 +618,6 @@ def main():
     print("train, val, test data shapes:")
     print(Final_train_data.shape, Final_test_data.shape, Final_val_data.shape)
 
-    kernel = torch.from_numpy(np.load(str(cwd) + "/kernel.npy"))
-    vel_train, vel_val = load_velocity(["train_10year_2day_mm", "val_10year_2day_mm"])
-
     const_channels_info, lat_map, lon_map = add_constant_info(const_info_path)
     H, W = Train_data.shape[3], Train_data.shape[4]
     Train_loader = DataLoader(
@@ -628,21 +627,76 @@ def main():
         pin_memory=False,
     )
     Val_loader = DataLoader(
-        Final_val_data[2:], batch_size=args.batch_size, shuffle=False, pin_memory=False
+        Final_val_data[2:], batch_size=args.batch_size, shuffle=False
     )
     Test_loader = DataLoader(
-        Final_test_data[2:], batch_size=args.batch_size, shuffle=False, pin_memory=False
+        Final_test_data[2:], batch_size=args.batch_size, shuffle=False
     )
-    time_loader = DataLoader(
-        time_steps[2:], batch_size=args.batch_size, shuffle=False, pin_memory=False
-    )
+    time_loader = DataLoader(time_steps[2:], batch_size=args.batch_size, shuffle=False)
     time_idx_steps = torch.tensor([i for i in range(365 * 4)]).view(-1, 1)
-    time_idx = DataLoader(
-        time_idx_steps[2:], batch_size=args.batch_size, shuffle=False, pin_memory=False
-    )
-
-    # Model declaration
+    time_idx = DataLoader(time_idx_steps[2:], batch_size=args.batch_size, shuffle=False)
     num_years = len(range(2006, 2016))
+
+    if not Path("kernel.npy").exists():
+        get_gauss_kernel((32, 64), lat, lon)
+
+    kernel = torch.from_numpy(np.load("kernel.npy"))
+    if not Path("test_10year_2day_mm_vel.npy").exists():
+        print("Fitting velocity...")
+        fit_velocity(
+            time_idx,
+            time_loader,
+            Final_train_data,
+            Train_loader,
+            device,
+            num_years,
+            paths_to_data,
+            args.scale,
+            H,
+            W,
+            types="train_10year_2day_mm",
+            vel_model=Optim_velocity,
+            kernel=kernel,
+            lat=lat,
+            lon=lon,
+        )
+        fit_velocity(
+            time_idx,
+            time_loader,
+            Final_val_data,
+            Val_loader,
+            device,
+            1,
+            paths_to_data,
+            args.scale,
+            H,
+            W,
+            types="val_10year_2day_mm",
+            vel_model=Optim_velocity,
+            kernel=kernel,
+            lat=lat,
+            lon=lon,
+        )
+        fit_velocity(
+            time_idx,
+            time_loader,
+            Final_test_data,
+            Test_loader,
+            torch.device("cuda"),
+            2,
+            paths_to_data,
+            args.scale,
+            H,
+            W,
+            types="test_10year_2day_mm",
+            vel_model=Optim_velocity,
+            kernel=kernel,
+            lat=lat,
+            lon=lon,
+        )
+
+    vel_train, vel_val = load_velocity(["train_10year_2day_mm", "val_10year_2day_mm"])
+
     model = Climate_encoder_free_uncertain(
         len(paths_to_data),
         2,
@@ -653,13 +707,8 @@ def main():
         use_pos=False,
     ).to(device)
 
-    param = sum(p.numel() for p in model.parameters() if p.requires_grad)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 300)
-
-    best_loss = float("inf")
-    train_best_loss = float("inf")
-    best_epoch = float("inf")
 
     for epoch in range(args.niters):
         print(f"##### Epoch {epoch} of {args.niters} #####")
@@ -673,13 +722,13 @@ def main():
         else:
             var_coeff = 2 * scheduler.get_last_lr()[0]
 
-        _total = min(len(time_loader), len(Train_loader))
         pbar = tqdm(
             enumerate(zip(time_loader, Train_loader)),
-            total=_total,
+            total=min(len(time_loader), len(Train_loader)),
             colour="green",
             desc="train",
         )
+
         for entry, (time_steps, batch) in pbar:
             optimizer.zero_grad()
             data = (
@@ -714,8 +763,6 @@ def main():
                 print("Quitting due to Nan loss")
                 quit()
             total_train_loss = total_train_loss + loss.item()
-
-            break
 
         lr_val = scheduler.get_last_lr()[0]
         scheduler.step()
@@ -757,26 +804,11 @@ def main():
                     quit()
                 pbar.set_postfix({"val_lss": loss.item()})
                 val_loss = val_loss + loss.item()
-                break
-
         print("|Iter ", epoch, " | Total Val Loss ", val_loss, "|")
-
-        if val_loss < best_loss:
-            best_loss = val_loss
-            best_epoch = epoch
-            torch.save(
-                model,
-                str(cwd)
-                + "/Models/"
-                + "ClimODE_global_"
-                + args.solver
-                + "_"
-                + str(args.spectral)
-                + "_model_"
-                + str(epoch)
-                + ".pt",
-            )
-        break
+        torch.save(
+            model,
+            f"checkpoints/ClimODE_global_{args.solver}_{args.spectral}_model_{epoch}_{val_loss}.pt",
+        )
 
 
 if __name__ == "__main__":
